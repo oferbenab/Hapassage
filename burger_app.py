@@ -103,4 +103,45 @@ elif page == "הזמנה חדשה":
         df_order = pd.DataFrame(st.session_state.current_order)
         st.dataframe(df_order, use_container_width=True, hide_index=True)
         
-        total = df_order["סה\"
+        total = df_order["סה\"כ"].sum()
+        tip_percent = st.radio("טיפ (%)", [10, 15, 20], horizontal=True, key="tip")
+        tip_amount = total * (tip_percent / 100)
+        final_total = total - tip_amount
+        
+        st.success(f"**סכום כולל: {total:.0f} ₪**")
+        st.info(f"**טיפ: {tip_amount:.0f} ₪** | **סופי: {final_total:.0f} ₪**")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("💾 שמור הזמנה", type="primary"):
+                st.success("✅ ההזמנה נשמרה!")
+        with col2:
+            if st.button("🆕 הזמנה חדשה"):
+                reset_new_order()
+                st.rerun()
+
+else:  # היסטוריה
+    st.subheader("היסטוריית הזמנות")
+    df = pd.read_sql("""
+        SELECT id as 'מספר', group_name as 'קבוצה', order_date as 'תאריך', 
+               final_total as 'סכום סופי' FROM orders 
+        ORDER BY created_at DESC
+    """, conn)
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+    if not df.empty:
+        selected_id = st.selectbox("בחר הזמנה", df['מספר'])
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("טען להזמנה"):
+                st.info("טעינה - בהמשך")
+        with col2:
+            if st.button("🗑️ מחק הזמנה"):
+                c.execute("DELETE FROM orders WHERE id=?", (selected_id,))
+                c.execute("DELETE FROM order_items WHERE order_id=?", (selected_id,))
+                conn.commit()
+                st.success("ההזמנה נמחקה")
+                st.rerun()
+
+st.divider()
+st.caption("מערכת ניהול הזמנות - מסעדת המבורגר")
