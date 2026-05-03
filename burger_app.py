@@ -13,8 +13,13 @@ c = conn.cursor()
 c.execute('''CREATE TABLE IF NOT EXISTS menu (id INTEGER PRIMARY KEY, name TEXT UNIQUE, price REAL)''')
 conn.commit()
 
+# Sidebar
 page = st.sidebar.selectbox("בחר עמוד", 
     ["הזמנה חדשה", "ניהול תפריט", "היסטוריה", "ייצוא PDF"])
+
+# Session State
+if 'current_order' not in st.session_state:
+    st.session_state.current_order = []
 
 if page == "ניהול תפריט":
     st.subheader("ניהול התפריט")
@@ -53,22 +58,37 @@ elif page == "הזמנה חדשה":
         st.markdown("**תקציב (₪)**")
         st.number_input("", min_value=0, value=None, step=1, key="budget", label_visibility="collapsed")
 
+    # הוספת מוצרים
     st.subheader("הוסף מוצרים")
-    menu_df = pd.read_sql("SELECT name FROM menu", conn)
+    menu_df = pd.read_sql("SELECT name, price FROM menu", conn)
     if not menu_df.empty:
         st.markdown("**בחר מוצר**")
         product = st.selectbox("", menu_df['name'], key="product")
         st.markdown("**כמות**")
-        qty = st.number_input("", min_value=1, value=None, step=1, key="qty")
+        qty = st.number_input("", min_value=1, value=1, step=1, key="qty")
+        
         if st.button("➕ הוסף להזמנה"):
-            st.success("נוסף להזמנה")
+            price = menu_df[menu_df['name'] == product]['price'].values[0]
+            st.session_state.current_order.append({
+                "מוצר": product,
+                "כמות": qty,
+                "סכום": price * qty
+            })
+            st.success(f"נוסף: {qty} × {product}")
+            st.rerun()
 
-    if st.button("שמור הזמנה"):
-        st.success("הזמנה נשמרה!")
+    # הצגת ההזמנה
+    if st.session_state.current_order:
+        st.subheader("ההזמנה הנוכחית")
+        df_order = pd.DataFrame(st.session_state.current_order)
+        st.dataframe(df_order, use_container_width=True, hide_index=True)
+
+    if st.button("💾 שמור הזמנה"):
+        st.success("✅ ההזמנה נשמרה!")
 
 elif page == "ייצוא PDF":
-    st.subheader("ייצוא הזמנה ל-PDF")
-    st.info("כאן יופיעו אפשרויות ייצוא PDF (מנהל / מטבח / לקוח)")
+    st.subheader("ייצוא PDF")
+    st.info("בחר סוג PDF:\n• PDF מנהל\n• PDF מטבח\n• PDF ללקוח")
 
 else:
     st.subheader("היסטוריה")
