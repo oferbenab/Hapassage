@@ -52,4 +52,21 @@ elif page == "הזמנה חדשה":
         st.markdown("**תקציב ₪**")
         st.number_input("", min_value=0, value=None, step=1, key="budget", label_visibility="collapsed")
 
-    st.sub
+    st.subheader("הוסף מוצרים")
+    menu_df = pd.read_sql("SELECT name FROM menu", conn)
+    if not menu_df.empty:
+        st.markdown("**בחר מוצר**")
+        product = st.selectbox("", menu_df['name'], key="product")
+        st.markdown("**כמות**")
+        qty = st.number_input("", min_value=1, value=None, step=1, key="qty")
+        if st.button("➕ הוסף להזמנה"):
+            st.success("נוסף להזמנה")
+
+    if st.button("שמור הזמנה"):
+        st.success("הזמנה נשמרה!")
+
+else:
+    st.subheader("היסטוריה")
+    st.info("היסטוריה תופיע כאן")
+
+st.caption("🍔 מסעדת המבורגר")
