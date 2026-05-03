@@ -16,17 +16,17 @@ c.execute('''CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY, group_name TEXT, phone TEXT, email TEXT, num_people INTEGER,
     budget REAL, order_date TEXT, order_time TEXT, total REAL, tip_percent INTEGER,
     tip_amount REAL, final_total REAL, created_at TEXT)''')
-c.execute('''CREATE TABLE IF NOT EXISTS order_items (id INTEGER PRIMARY KEY, order_id INTEGER, product_name TEXT, quantity INTEGER, line_total REAL)''')
+c.execute('''CREATE TABLE IF NOT EXISTS order_items (
+    id INTEGER PRIMARY KEY, order_id INTEGER, product_name TEXT, quantity INTEGER, line_total REAL)''')
 conn.commit()
 
-# ====================== SESSION ======================
+# ====================== SESSION STATE ======================
 if 'current_order' not in st.session_state:
     st.session_state.current_order = []
 
 def reset_new_order():
-    keys_to_clear = ['group', 'phone', 'email', 'people', 'budget']
-    for key in keys_to_clear:
-        if key in st.session_state:
+    for key in list(st.session_state.keys()):
+        if key not in ['current_order']:
             del st.session_state[key]
     st.session_state.current_order = []
 
@@ -63,32 +63,32 @@ elif page == "הזמנה חדשה":
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("**שם הקבוצה**")
-        group = st.text_input("", key="group", placeholder="שם הקבוצה", label_visibility="collapsed")
+        st.text_input("", key="group", placeholder="שם הקבוצה", label_visibility="collapsed")
         st.markdown("**טלפון**")
-        phone = st.text_input("", key="phone", placeholder="טלפון", label_visibility="collapsed")
+        st.text_input("", key="phone", placeholder="טלפון", label_visibility="collapsed")
         st.markdown("**מייל**")
-        email = st.text_input("", key="email", placeholder="מייל", label_visibility="collapsed")
+        st.text_input("", key="email", placeholder="מייל", label_visibility="collapsed")
     with col2:
         st.markdown("**מספר סועדים**")
-        people = st.number_input("", min_value=1, value=10, step=1, key="people", label_visibility="collapsed")
+        st.number_input("", min_value=1, value=10, step=1, key="people", label_visibility="collapsed")
         st.markdown("**תקציב (₪)**")
-        budget = st.number_input("", min_value=0, value=1500, step=1, key="budget", label_visibility="collapsed")
+        st.number_input("", min_value=0, value=1500, step=1, key="budget", label_visibility="collapsed")
 
     st.subheader("תאריך ושעה")
     col3, col4 = st.columns(2)
     with col3:
-        order_date = st.date_input("תאריך", datetime.date.today(), key="date")
+        st.date_input("תאריך", datetime.date.today(), key="date")
     with col4:
-        order_time = st.time_input("שעה", datetime.datetime.now().time(), key="time")
+        st.time_input("שעה", datetime.datetime.now().time(), key="time")
 
     # הוספת מוצרים
     st.subheader("הוסף מוצרים")
     menu_df = pd.read_sql("SELECT name, price FROM menu", conn)
     if not menu_df.empty:
         st.markdown("**בחר מוצר**")
-        product = st.selectbox("", menu_df['name'], key="product", label_visibility="collapsed")
+        product = st.selectbox("", menu_df['name'], key="product_select", label_visibility="collapsed")
         st.markdown("**כמות**")
-        qty = st.number_input("", min_value=1, value=1, step=1, key="qty", label_visibility="collapsed")
+        qty = st.number_input("", min_value=1, value=1, step=1, key="qty_input", label_visibility="collapsed")
         
         if st.button("➕ הוסף להזמנה"):
             price = menu_df[menu_df['name'] == product]['price'].values[0]
@@ -98,50 +98,9 @@ elif page == "הזמנה חדשה":
             st.success(f"נוסף: {qty} × {product}")
             st.rerun()  # מאפס את שדה הכמות
 
-    # הצגת הזמנה נוכחית
+    # הזמנה נוכחית
     if st.session_state.current_order:
         df_order = pd.DataFrame(st.session_state.current_order)
         st.dataframe(df_order, use_container_width=True, hide_index=True)
         
-        total = df_order["סה\"כ"].sum()
-        tip_percent = st.radio("טיפ (%)", [10, 15, 20], horizontal=True, key="tip")
-        tip_amount = total * (tip_percent / 100)
-        final_total = total - tip_amount
-        
-        st.success(f"**סכום כולל: {total:.0f} ₪**")
-        st.info(f"**טיפ: {tip_amount:.0f} ₪** | **סופי: {final_total:.0f} ₪**")
-
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("💾 שמור הזמנה", type="primary"):
-                st.success("✅ ההזמנה נשמרה בהצלחה!")
-        with col2:
-            if st.button("🆕 הזמנה חדשה"):
-                reset_new_order()
-                st.rerun()
-
-else:  # היסטוריה
-    st.subheader("היסטוריית הזמנות")
-    df = pd.read_sql("""
-        SELECT id, group_name as 'קבוצה', order_date as 'תאריך', 
-               final_total as 'סכום סופי' FROM orders 
-        ORDER BY created_at DESC
-    """, conn)
-    st.dataframe(df, use_container_width=True, hide_index=True)
-
-    if not df.empty:
-        selected = st.selectbox("בחר הזמנה", df['id'])
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("טען להזמנה"):
-                st.info("פיצ'ר טעינה - בהמשך")
-        with col2:
-            if st.button("🗑️ מחק"):
-                c.execute("DELETE FROM orders WHERE id=?", (selected,))
-                c.execute("DELETE FROM order_items WHERE order_id=?", (selected,))
-                conn.commit()
-                st.success("נמחק")
-                st.rerun()
-
-st.divider()
-st.caption("מערכת ניהול הזמנות - מסעדת המבורגר")
+        total = df_order["סה\"
