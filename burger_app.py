@@ -13,9 +13,8 @@ c = conn.cursor()
 c.execute('''CREATE TABLE IF NOT EXISTS menu (id INTEGER PRIMARY KEY, name TEXT UNIQUE, price REAL)''')
 conn.commit()
 
-# Sidebar עם האופציות שביקשת
 page = st.sidebar.selectbox("בחר עמוד", 
-    ["הזמנה חדשה", "ניהול תפריט", "היסטוריה", "ייצוא PDF", "חזרה להזמנה"])
+    ["הזמנה חדשה", "ניהול תפריט", "היסטוריה", "ייצוא PDF"])
 
 if page == "ניהול תפריט":
     st.subheader("ניהול התפריט")
@@ -69,13 +68,7 @@ elif page == "הזמנה חדשה":
 
 elif page == "ייצוא PDF":
     st.subheader("ייצוא הזמנה ל-PDF")
-    st.info("פיצ'ר ייצוא PDF יורחב בהמשך.\nבחר הזמנה מהיסטוריה וייצא אותה.")
-
-elif page == "חזרה להזמנה":
-    st.subheader("חזרה להזמנה")
-    st.info("כאן תוכל להמשיך את ההזמנה הנוכחית.")
-    if st.button("חזור להזמנה"):
-        st.switch_page("הזמנה חדשה")
+    st.info("כאן יופיעו אפשרויות ייצוא PDF (מנהל / מטבח / לקוח)")
 
 else:
     st.subheader("היסטוריה")
