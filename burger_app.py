@@ -24,7 +24,7 @@ if page == "ניהול תפריט":
         new_name = st.text_input("", placeholder="שם המוצר", label_visibility="collapsed")
     with col2:
         st.markdown("**מחיר ₪**")
-        new_price = st.number_input("", min_value=0, value=0, step=1, label_visibility="collapsed")
+        new_price = st.number_input("", min_value=0, value=None, step=1, label_visibility="collapsed")
     
     if st.button("➕ הוסף מוצר"):
         if new_name:
@@ -45,17 +45,30 @@ elif page == "הזמנה חדשה":
         st.text_input("", key="group", placeholder="שם הקבוצה", label_visibility="collapsed")
         st.markdown("**טלפון**")
         st.text_input("", key="phone", placeholder="טלפון", label_visibility="collapsed")
+        st.markdown("**מייל**")
+        st.text_input("", key="email", placeholder="מייל", label_visibility="collapsed")
     with col2:
         st.markdown("**מספר סועדים**")
-        st.number_input("", min_value=1, value=10, step=1, key="people", label_visibility="collapsed")
+        st.number_input("", min_value=1, value=None, step=1, key="people", label_visibility="collapsed")
         st.markdown("**תקציב (₪)**")
-        st.number_input("", min_value=0, value=1500, step=1, key="budget", label_visibility="collapsed")
+        st.number_input("", min_value=0, value=None, step=1, key="budget", label_visibility="collapsed")
 
+    st.subheader("תאריך ושעה")
+    col3, col4 = st.columns(2)
+    with col3:
+        st.date_input("תאריך", datetime.date.today(), key="date")
+    with col4:
+        st.time_input("שעה", datetime.datetime.now().time(), key="time")
+
+    # הוספת מוצרים
     st.subheader("הוסף מוצרים")
     menu_df = pd.read_sql("SELECT name FROM menu", conn)
     if not menu_df.empty:
-        product = st.selectbox("בחר מוצר", menu_df['name'])
-        qty = st.number_input("כמות", min_value=1, value=1, step=1)
+        st.markdown("**בחר מוצר**")
+        product = st.selectbox("", menu_df['name'], key="product", label_visibility="collapsed")
+        st.markdown("**כמות**")
+        qty = st.number_input("", min_value=1, value=None, step=1, key="qty", label_visibility="collapsed")
+        
         if st.button("➕ הוסף להזמנה"):
             st.success("נוסף להזמנה")
 
