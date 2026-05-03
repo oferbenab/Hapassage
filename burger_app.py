@@ -3,7 +3,7 @@ import sqlite3
 import pandas as pd
 import datetime
 
-st.set_page_config(page_title="המבורגר - ניהול הזמנות", layout="centered")
+st.set_page_config(page_title="🍔 מסעדת המבורגר", layout="centered")
 
 st.title("🍔 ניהול קבוצות סועדים")
 
@@ -13,7 +13,9 @@ c = conn.cursor()
 c.execute('''CREATE TABLE IF NOT EXISTS menu (id INTEGER PRIMARY KEY, name TEXT UNIQUE, price REAL)''')
 conn.commit()
 
-page = st.sidebar.selectbox("בחר עמוד", ["הזמנה חדשה", "ניהול תפריט", "היסטוריה"])
+# Sidebar עם האופציות שביקשת
+page = st.sidebar.selectbox("בחר עמוד", 
+    ["הזמנה חדשה", "ניהול תפריט", "היסטוריה", "ייצוא PDF", "חזרה להזמנה"])
 
 if page == "ניהול תפריט":
     st.subheader("ניהול התפריט")
@@ -49,7 +51,7 @@ elif page == "הזמנה חדשה":
     with col2:
         st.markdown("**מספר סועדים**")
         st.number_input("", min_value=1, value=None, step=1, key="people", label_visibility="collapsed")
-        st.markdown("**תקציב ₪**")
+        st.markdown("**תקציב (₪)**")
         st.number_input("", min_value=0, value=None, step=1, key="budget", label_visibility="collapsed")
 
     st.subheader("הוסף מוצרים")
@@ -65,8 +67,19 @@ elif page == "הזמנה חדשה":
     if st.button("שמור הזמנה"):
         st.success("הזמנה נשמרה!")
 
+elif page == "ייצוא PDF":
+    st.subheader("ייצוא הזמנה ל-PDF")
+    st.info("פיצ'ר ייצוא PDF יורחב בהמשך.\nבחר הזמנה מהיסטוריה וייצא אותה.")
+
+elif page == "חזרה להזמנה":
+    st.subheader("חזרה להזמנה")
+    st.info("כאן תוכל להמשיך את ההזמנה הנוכחית.")
+    if st.button("חזור להזמנה"):
+        st.switch_page("הזמנה חדשה")
+
 else:
     st.subheader("היסטוריה")
     st.info("היסטוריה תופיע כאן")
 
+st.divider()
 st.caption("🍔 מסעדת המבורגר")
