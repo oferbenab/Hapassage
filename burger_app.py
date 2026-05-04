@@ -3,61 +3,228 @@ import sqlite3
 import pandas as pd
 import datetime
 
-st.set_page_config(page_title="🍔 מסעדת המבורגר", layout="centered")
+st.set_page_config(page_title="🍔 מערכת ניהול מסעדה", layout="wide")
 
-st.title("🍔 ניהול קבוצות סועדים")
-
-# ====================== DATABASE ======================
+# DB
 conn = sqlite3.connect('hamburger.db', check_same_thread=False)
 c = conn.cursor()
 
-c.execute('''CREATE TABLE IF NOT EXISTS menu (id INTEGER PRIMARY KEY, name TEXT UNIQUE, price REAL)''')
+# Tables
+c.execute('''
+CREATE TABLE IF NOT EXISTS menu (
+    id INTEGER PRIMARY KEY,
+    name TEXT UNIQUE,
+    price REAL
+)
+''')
+
+c.execute('''
+CREATE TABLE IF NOT EXISTS orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_name TEXT,
+    phone TEXT,
+    email TEXT,
+    people INTEGER,
+    budget REAL,
+    total REAL,
+    created_at TEXT
+)
+''')
+
+c.execute('''
+CREATE TABLE IF NOT EXISTS order_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER,
+    product_name TEXT,
+    quantity INTEGER,
+    price REAL
+)
+''')
+
 conn.commit()
 
-# ====================== SESSION ======================
-if 'current_order' not in st.session_state:
-    st.session_state.current_order = []
+# Session
+if "order" not in st.session_state:
+    st.session_state.order = []
 
-def reset_order():
-    st.session_state.current_order = []
-    for key in ['group', 'phone', 'email', 'people', 'budget']:
-        if key in st.session_state:
-            del st.session_state[key]
+# Sidebar
+page = st.sidebar.radio("ניווט", ["🆕 הזמנה חדשה", "📋 תפריט", "📊 היסטוריה"])
 
-# ====================== SIDEBAR ======================
-page = st.sidebar.selectbox("בחר עמוד", ["הזמנה חדשה", "ניהול תפריט", "היסטוריה"])
+# ===============================
+# 📋 MENU MANAGEMENT
+# ===============================
+if page == "📋 תפריט":
 
-# ====================== PAGES ======================
-if page == "ניהול תפריט":
-    st.subheader("ניהול תפריט")
+    st.title("📋 ניהול תפריט")
+
     col1, col2 = st.columns([3,1])
+
     with col1:
-        st.write("**שם המוצר**")
-        name = st.text_input(" ", placeholder="שם המוצר", label_visibility="collapsed")
+        name = st.text_input("שם מוצר")
+
     with col2:
-        st.write("**מחיר ₪**")
-        price = st.number_input(" ", min_value=0, value=0, step=1, label_visibility="collapsed")
-    
+        price = st.number_input("מחיר ₪", min_value=0)
+
     if st.button("➕ הוסף מוצר"):
         if name:
-            c.execute("INSERT OR IGNORE INTO menu (name, price) VALUES (?, ?)", (name, price))
+            c.execute("INSERT OR IGNORE INTO menu (name, price) VALUES (?,?)", (name, price))
             conn.commit()
-            st.success("✅ נוסף!")
+            st.success("נוסף!")
             st.rerun()
 
-    st.subheader("תפריט נוכחי")
-    df = pd.read_sql("SELECT name as 'מוצר', price as 'מחיר ₪' FROM menu", conn)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.divider()
 
-elif page == "הזמנה חדשה":
-    st.subheader("פרטי הקבוצה")
+    search = st.text_input("🔍 חיפוש מוצר")
+
+    df = pd.read_sql("SELECT * FROM menu", conn)
+
+    if search:
+        df = df[df["name"].str.contains(search, case=False)]
+
+    for i, row in df.iterrows():
+        col1, col2, col3 = st.columns([4,2,1])
+        col1.write(row["name"])
+        col2.write(f"₪ {row['price']}")
+        if col3.button("❌", key=f"del{row['id']}"):
+            c.execute("DELETE FROM menu WHERE id=?", (row["id"],))
+            conn.commit()
+            st.rerun()
+
+# ===============================
+# 🆕 NEW ORDER
+# ===============================
+elif page == "🆕 הזמנה חדשה":
+
+    st.title("🆕 הזמנה חדשה")
+
     col1, col2 = st.columns(2)
+
     with col1:
-        st.write("**שם הקבוצה**")
-        st.text_input(" ", key="group", placeholder="שם הקבוצה", label_visibility="collapsed")
-        st.write("**טלפון**")
-        st.text_input(" ", key="phone", placeholder="050-1234567", label_visibility="collapsed")
-        st.write("**מייל**")
-        st.text_input(" ", key="email", placeholder="example@email.com", label_visibility="collapsed")
+        group = st.text_input("שם קבוצה")
+        phone = st.text_input("טלפון")
+        email = st.text_input("מייל")
+
     with col2:
-        st.write("**מס
+        people = st.number_input("מספר סועדים", min_value=1)
+        budget = st.number_input("תקציב ₪", min_value=0)
+
+    st.divider()
+
+    menu_df = pd.read_sql("SELECT * FROM menu", conn)
+
+    if menu_df.empty:
+        st.warning("אין מוצרים בתפריט")
+    else:
+        col1, col2, col3 = st.columns([3,1,1])
+
+        product = col1.selectbox("בחר מוצר", menu_df["name"])
+        qty = col2.number_input("כמות", min_value=1, value=1)
+
+        if col3.button("➕"):
+            price = menu_df[menu_df["name"] == product]["price"].values[0]
+
+            st.session_state.order.append({
+                "name": product,
+                "qty": qty,
+                "price": price,
+                "total": price * qty
+            })
+
+            st.rerun()
+
+    st.divider()
+
+    # Order Table
+    if st.session_state.order:
+
+        st.subheader("🧾 ההזמנה")
+
+        df = pd.DataFrame(st.session_state.order)
+
+        for i, row in df.iterrows():
+            col1, col2, col3, col4, col5 = st.columns([3,1,1,1,1])
+
+            col1.write(row["name"])
+            new_qty = col2.number_input("", value=row["qty"], key=f"qty{i}")
+
+            if new_qty != row["qty"]:
+                st.session_state.order[i]["qty"] = new_qty
+                st.session_state.order[i]["total"] = new_qty * row["price"]
+                st.rerun()
+
+            col3.write(f"₪ {row['price']}")
+            col4.write(f"₪ {row['total']}")
+
+            if col5.button("❌", key=f"remove{i}"):
+                st.session_state.order.pop(i)
+                st.rerun()
+
+        total = sum(item["total"] for item in st.session_state.order)
+
+        st.markdown(f"## 💰 סה\"כ: ₪ {total}")
+
+        if budget and total > budget:
+            st.error("⚠️ חרגת מהתקציב!")
+
+        col1, col2 = st.columns(2)
+
+        if col1.button("💾 שמור הזמנה"):
+
+            c.execute("""
+            INSERT INTO orders (group_name, phone, email, people, budget, total, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                group, phone, email, people, budget, total,
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+            ))
+
+            order_id = c.lastrowid
+
+            for item in st.session_state.order:
+                c.execute("""
+                INSERT INTO order_items (order_id, product_name, quantity, price)
+                VALUES (?, ?, ?, ?)
+                """, (
+                    order_id,
+                    item["name"],
+                    item["qty"],
+                    item["total"]
+                ))
+
+            conn.commit()
+
+            st.success("✅ נשמר בהצלחה!")
+
+            st.session_state.order = []
+            st.rerun()
+
+        if col2.button("🗑️ נקה הכל"):
+            st.session_state.order = []
+            st.rerun()
+
+# ===============================
+# 📊 HISTORY
+# ===============================
+else:
+
+    st.title("📊 היסטוריית הזמנות")
+
+    df = pd.read_sql("SELECT * FROM orders ORDER BY id DESC", conn)
+
+    if df.empty:
+        st.info("אין הזמנות עדיין")
+    else:
+        st.dataframe(df, use_container_width=True)
+
+        order_id = st.number_input("בחר הזמנה", min_value=1)
+
+        if st.button("הצג פרטים"):
+            items = pd.read_sql(f"""
+            SELECT product_name as מוצר,
+                   quantity as כמות,
+                   price as סכום
+            FROM order_items
+            WHERE order_id = {order_id}
+            """, conn)
+
+            st.dataframe(items, use_container_width=True)
