@@ -60,56 +60,33 @@ page = st.sidebar.radio("ניווט", [
     "📄 PDF"
 ])
 
-if st.sidebar.button("⬅ חזור להזמנה"):
-    st.session_state.page_override = "🆕 הזמנה חדשה"
-
-if "page_override" in st.session_state:
-    page = st.session_state.page_override
-    del st.session_state.page_override
-
 # ======================
-# 📋 MENU
+# 📋 MENU (טבלה מלאה)
 # ======================
 if page == "📋 תפריט":
 
     st.title("📋 ניהול תפריט")
 
-    col1, col2, col3 = st.columns([4,2,1])
-    new_name = col1.text_input("מוצר חדש")
-    new_price = col2.number_input("מחיר", min_value=0)
+    df = pd.read_sql("SELECT id, name, price FROM menu", conn)
 
-    if col3.button("➕"):
-        if new_name:
-            c.execute("INSERT OR IGNORE INTO menu (name, price) VALUES (?,?)", (new_name, new_price))
-            conn.commit()
-            st.rerun()
+    edited = st.data_editor(
+        df,
+        num_rows="dynamic",
+        use_container_width=True,
+        key="menu_editor"
+    )
 
-    st.divider()
-
-    df = pd.read_sql("SELECT * FROM menu", conn)
-
-    # כותרת
-    h1, h2, h3 = st.columns([4,2,1])
-    h1.markdown("**מוצר**")
-    h2.markdown("**מחיר**")
-    h3.markdown("")
-
-    for i, row in df.iterrows():
-        col1, col2, col3 = st.columns([4,2,1])
-
-        name = col1.text_input("", value=row["name"], key=f"name_{i}")
-        price = col2.number_input("", value=row["price"], key=f"price_{i}")
-
-        if name != row["name"] or price != row["price"]:
-            c.execute("UPDATE menu SET name=?, price=? WHERE id=?",
-                      (name, price, row["id"]))
-            conn.commit()
-            st.rerun()
-
-        if col3.button("❌", key=f"del_{i}"):
-            c.execute("DELETE FROM menu WHERE id=?", (row["id"],))
-            conn.commit()
-            st.rerun()
+    # שמירה
+    if st.button("💾 שמור שינויים"):
+        c.execute("DELETE FROM menu")
+        for _, row in edited.iterrows():
+            if pd.notna(row["name"]):
+                c.execute(
+                    "INSERT INTO menu (id, name, price) VALUES (?, ?, ?)",
+                    (row["id"], row["name"], row["price"])
+                )
+        conn.commit()
+        st.success("נשמר!")
 
 # ======================
 # 🆕 NEW ORDER
@@ -118,30 +95,21 @@ elif page == "🆕 הזמנה חדשה":
 
     st.title("🆕 הזמנה חדשה")
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        group = st.text_input("שם קבוצה")
-        phone = st.text_input("טלפון")
-        email = st.text_input("מייל")
-
-    with col2:
-        people = st.number_input("מספר סועדים", min_value=1)
-        budget = st.number_input("תקציב ₪", min_value=0)
+    group = st.text_input("שם קבוצה")
+    phone = st.text_input("טלפון")
+    email = st.text_input("מייל")
+    people = st.number_input("מספר סועדים", min_value=1)
+    budget = st.number_input("תקציב ₪", min_value=0)
 
     st.divider()
 
-    menu_df = pd.read_sql("SELECT * FROM menu", conn)
+    menu_df = pd.read_sql("SELECT name, price FROM menu", conn)
 
-    if menu_df.empty:
-        st.warning("אין מוצרים בתפריט")
-    else:
-        col1, col2, col3 = st.columns([4,2,1])
+    if not menu_df.empty:
+        product = st.selectbox("בחר מוצר", menu_df["name"])
+        qty = st.number_input("כמות", min_value=1, value=1)
 
-        product = col1.selectbox("בחר מוצר", menu_df["name"])
-        qty = col2.number_input("כמות", min_value=1, value=1)
-
-        if col3.button("➕"):
+        if st.button("➕ הוסף"):
             price = menu_df[menu_df["name"] == product]["price"].values[0]
 
             st.session_state.order.append({
@@ -152,42 +120,35 @@ elif page == "🆕 הזמנה חדשה":
             })
             st.rerun()
 
-    st.divider()
-
     # ===== ORDER TABLE
     if st.session_state.order:
 
-        st.subheader("🧾 ההזמנה")
+        df = pd.DataFrame(st.session_state.order)
 
-        h1, h2, h3, h4 = st.columns([4,2,2,1])
-        h1.markdown("**מוצר**")
-        h2.markdown("**כמות**")
-        h3.markdown("**סכום**")
-        h4.markdown("")
+        df_display = df[["name", "qty", "total"]].rename(columns={
+            "name": "מוצר",
+            "qty": "כמות",
+            "total": "סכום"
+        })
 
-        for i, item in enumerate(st.session_state.order):
+        edited_df = st.data_editor(
+            df_display,
+            use_container_width=True,
+            key="order_editor"
+        )
 
-            col1, col2, col3, col4 = st.columns([4,2,2,1])
+        # עדכון
+        new_order = []
+        for i, row in edited_df.iterrows():
+            price = df.iloc[i]["price"]
+            new_order.append({
+                "name": row["מוצר"],
+                "qty": int(row["כמות"]),
+                "price": price,
+                "total": int(row["כמות"]) * price
+            })
 
-            col1.write(item["name"])
-
-            qty_val = col2.number_input(
-                "",
-                min_value=1,
-                value=item["qty"],
-                key=f"qty_{i}"
-            )
-
-            if qty_val != item["qty"]:
-                st.session_state.order[i]["qty"] = qty_val
-                st.session_state.order[i]["total"] = qty_val * item["price"]
-                st.rerun()
-
-            col3.write(f"₪ {item['total']}")
-
-            if col4.button("❌", key=f"remove_{i}"):
-                st.session_state.order.pop(i)
-                st.rerun()
+        st.session_state.order = new_order
 
         total = sum(x["total"] for x in st.session_state.order)
         st.markdown(f"## 💰 סה\"כ: ₪ {total}")
@@ -195,9 +156,7 @@ elif page == "🆕 הזמנה חדשה":
         if budget and total > budget:
             st.error("⚠️ חרגת מהתקציב!")
 
-        col1, col2 = st.columns(2)
-
-        if col1.button("💾 שמור הזמנה"):
+        if st.button("💾 שמור הזמנה"):
 
             c.execute("""
             INSERT INTO orders (group_name, phone, email, people, budget, total, created_at)
@@ -221,41 +180,32 @@ elif page == "🆕 הזמנה חדשה":
                 ))
 
             conn.commit()
-
-            st.success("✅ נשמר בהצלחה!")
             st.session_state.order = []
-            st.rerun()
-
-        if col2.button("🗑️ נקה הכל"):
-            st.session_state.order = []
-            st.rerun()
+            st.success("נשמר!")
 
 # ======================
-# 📊 HISTORY
+# 📊 HISTORY (טבלאות מסודרות)
 # ======================
 elif page == "📊 היסטוריה":
 
-    st.title("📊 היסטוריית הזמנות")
+    st.title("📊 היסטוריה")
 
-    df = pd.read_sql("SELECT * FROM orders ORDER BY id DESC", conn)
+    orders = pd.read_sql("SELECT * FROM orders ORDER BY id DESC", conn)
 
-    if df.empty:
-        st.info("אין הזמנות עדיין")
-    else:
-        st.dataframe(df, use_container_width=True)
+    st.dataframe(orders, use_container_width=True)
 
-        order_id = st.number_input("בחר הזמנה", min_value=1)
+    order_id = st.number_input("בחר ID להזמנה", min_value=1)
 
-        if st.button("הצג פרטים"):
-            items = pd.read_sql(f"""
-            SELECT product_name as מוצר,
-                   quantity as כמות,
-                   price as סכום
-            FROM order_items
-            WHERE order_id = {order_id}
-            """, conn)
+    if st.button("הצג פרטים"):
+        items = pd.read_sql(f"""
+        SELECT product_name as מוצר,
+               quantity as כמות,
+               price as סכום
+        FROM order_items
+        WHERE order_id = {order_id}
+        """, conn)
 
-            st.dataframe(items, use_container_width=True)
+        st.data_editor(items, use_container_width=True)
 
 # ======================
 # 📄 PDF
@@ -275,8 +225,4 @@ elif page == "📄 PDF":
         total = sum(x["total"] for x in st.session_state.order)
         text += f"\nסה\"כ: ₪ {total}"
 
-        st.download_button(
-            "📥 הורד קובץ",
-            text,
-            file_name="order.txt"
-        )
+        st.download_button("📥 הורד", text, file_name="order.txt")
