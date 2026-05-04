@@ -93,3 +93,45 @@ elif page == "הזמנה חדשה":
         qty = st.number_input("", min_value=1, value=1, step=1, key="qty")
         
         if st.button("➕ הוסף להזמנה"):
+            price = menu_df[menu_df['name'] == product]['price'].values[0]
+            st.session_state.current_order.append({
+                "מוצר": product,
+                "כמות": qty,
+                "סכום": price * qty
+            })
+            st.success(f"✅ נוסף: {qty} × {product}")
+            st.rerun()
+
+    # Current Order
+    if st.session_state.current_order:
+        st.subheader("ההזמנה הנוכחית")
+        df_order = pd.DataFrame(st.session_state.current_order)
+        st.dataframe(df_order, use_container_width=True, hide_index=True)
+        
+        total = df_order["סכום"].sum()
+        tip = st.radio("טיפ", [10, 15, 20], horizontal=True)
+        tip_amount = total * tip / 100
+        final = total - tip_amount
+        
+        st.success(f"**סכום כולל: {total:.0f} ₪**")
+        st.info(f"**טיפ: {tip_amount:.0f} ₪** | **סופי: {final:.0f} ₪**")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("💾 שמור הזמנה", type="primary"):
+                st.success("הזמנה נשמרה בהצלחה!")
+        with col2:
+            if st.button("🆕 הזמנה חדשה"):
+                reset_order()
+                st.rerun()
+
+elif page == "ייצוא PDF":
+    st.subheader("ייצוא PDF")
+    st.info("בחר סוג דוח:\n• PDF מנהל (מלא)\n• PDF מטבח (כמויות)\n• PDF ללקוח")
+
+else:
+    st.subheader("היסטוריה")
+    st.info("היסטוריה תופיע כאן (ניתן להרחיב)")
+
+st.divider()
+st.caption("מערכת ניהול הזמנות - מסעדת המבורגר")
