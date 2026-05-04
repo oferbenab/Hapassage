@@ -5,11 +5,12 @@ import datetime
 
 st.set_page_config(page_title="🍔 מערכת ניהול מסעדה", layout="wide")
 
+# ======================
 # DB
+# ======================
 conn = sqlite3.connect('hamburger.db', check_same_thread=False)
 c = conn.cursor()
 
-# Tables
 c.execute('''
 CREATE TABLE IF NOT EXISTS menu (
     id INTEGER PRIMARY KEY,
@@ -43,56 +44,70 @@ CREATE TABLE IF NOT EXISTS order_items (
 
 conn.commit()
 
-# Session
+# ======================
+# SESSION
+# ======================
 if "order" not in st.session_state:
     st.session_state.order = []
 
-# Sidebar
-page = st.sidebar.radio("ניווט", ["🆕 הזמנה חדשה", "📋 תפריט", "📊 היסטוריה"])
+# ======================
+# SIDEBAR
+# ======================
+page = st.sidebar.radio("ניווט", [
+    "🆕 הזמנה חדשה",
+    "📋 תפריט",
+    "📊 היסטוריה",
+    "📄 PDF"
+])
 
-# ===============================
-# 📋 MENU MANAGEMENT
-# ===============================
+if st.sidebar.button("⬅ חזור להזמנה"):
+    st.session_state.page_override = "🆕 הזמנה חדשה"
+
+if "page_override" in st.session_state:
+    page = st.session_state.page_override
+    del st.session_state.page_override
+
+# ======================
+# 📋 MENU
+# ======================
 if page == "📋 תפריט":
 
     st.title("📋 ניהול תפריט")
 
     col1, col2 = st.columns([3,1])
-
-    with col1:
-        name = st.text_input("שם מוצר")
-
-    with col2:
-        price = st.number_input("מחיר ₪", min_value=0)
+    name = col1.text_input("שם מוצר חדש")
+    price = col2.number_input("מחיר ₪", min_value=0)
 
     if st.button("➕ הוסף מוצר"):
         if name:
             c.execute("INSERT OR IGNORE INTO menu (name, price) VALUES (?,?)", (name, price))
             conn.commit()
-            st.success("נוסף!")
             st.rerun()
 
     st.divider()
 
-    search = st.text_input("🔍 חיפוש מוצר")
-
     df = pd.read_sql("SELECT * FROM menu", conn)
 
-    if search:
-        df = df[df["name"].str.contains(search, case=False)]
-
     for i, row in df.iterrows():
-        col1, col2, col3 = st.columns([4,2,1])
-        col1.write(row["name"])
-        col2.write(f"₪ {row['price']}")
-        if col3.button("❌", key=f"del{row['id']}"):
+        col1, col2, col3, col4 = st.columns([4,2,1,1])
+
+        new_name = col1.text_input("", value=row["name"], key=f"name{i}")
+        new_price = col2.number_input("", value=row["price"], key=f"price{i}")
+
+        if col3.button("💾", key=f"save{i}"):
+            c.execute("UPDATE menu SET name=?, price=? WHERE id=?",
+                      (new_name, new_price, row["id"]))
+            conn.commit()
+            st.rerun()
+
+        if col4.button("❌", key=f"del{i}"):
             c.execute("DELETE FROM menu WHERE id=?", (row["id"],))
             conn.commit()
             st.rerun()
 
-# ===============================
+# ======================
 # 🆕 NEW ORDER
-# ===============================
+# ======================
 elif page == "🆕 הזמנה חדשה":
 
     st.title("🆕 הזמנה חדשה")
@@ -120,7 +135,7 @@ elif page == "🆕 הזמנה חדשה":
         product = col1.selectbox("בחר מוצר", menu_df["name"])
         qty = col2.number_input("כמות", min_value=1, value=1)
 
-        if col3.button("➕"):
+        if col3.button("➕ הוסף"):
             price = menu_df[menu_df["name"] == product]["price"].values[0]
 
             st.session_state.order.append({
@@ -134,32 +149,36 @@ elif page == "🆕 הזמנה חדשה":
 
     st.divider()
 
-    # Order Table
+    # ===== ORDER TABLE (שורה אחת לכל פריט)
     if st.session_state.order:
 
         st.subheader("🧾 ההזמנה")
 
-        df = pd.DataFrame(st.session_state.order)
+        for i, item in enumerate(st.session_state.order):
 
-        for i, row in df.iterrows():
-            col1, col2, col3, col4, col5 = st.columns([3,1,1,1,1])
+            col1, col2, col3, col4 = st.columns([4,2,2,1])
 
-            col1.write(row["name"])
-            new_qty = col2.number_input("", value=row["qty"], key=f"qty{i}")
+            col1.write(item["name"])
 
-            if new_qty != row["qty"]:
+            new_qty = col2.number_input(
+                "כמות",
+                min_value=1,
+                value=item["qty"],
+                key=f"qty_{i}"
+            )
+
+            if new_qty != item["qty"]:
                 st.session_state.order[i]["qty"] = new_qty
-                st.session_state.order[i]["total"] = new_qty * row["price"]
+                st.session_state.order[i]["total"] = new_qty * item["price"]
                 st.rerun()
 
-            col3.write(f"₪ {row['price']}")
-            col4.write(f"₪ {row['total']}")
+            col3.markdown(f"💰 ₪ {item['total']}")
 
-            if col5.button("❌", key=f"remove{i}"):
+            if col4.button("❌", key=f"del_item_{i}"):
                 st.session_state.order.pop(i)
                 st.rerun()
 
-        total = sum(item["total"] for item in st.session_state.order)
+        total = sum(x["total"] for x in st.session_state.order)
 
         st.markdown(f"## 💰 סה\"כ: ₪ {total}")
 
@@ -194,7 +213,6 @@ elif page == "🆕 הזמנה חדשה":
             conn.commit()
 
             st.success("✅ נשמר בהצלחה!")
-
             st.session_state.order = []
             st.rerun()
 
@@ -202,10 +220,10 @@ elif page == "🆕 הזמנה חדשה":
             st.session_state.order = []
             st.rerun()
 
-# ===============================
+# ======================
 # 📊 HISTORY
-# ===============================
-else:
+# ======================
+elif page == "📊 היסטוריה":
 
     st.title("📊 היסטוריית הזמנות")
 
@@ -228,3 +246,27 @@ else:
             """, conn)
 
             st.dataframe(items, use_container_width=True)
+
+# ======================
+# 📄 PDF (בסיסי)
+# ======================
+elif page == "📄 PDF":
+
+    st.title("📄 ייצוא PDF")
+
+    if not st.session_state.order:
+        st.warning("אין הזמנה להדפסה")
+    else:
+        text = "הזמנה:\n\n"
+
+        for item in st.session_state.order:
+            text += f"{item['name']} x{item['qty']} - ₪ {item['total']}\n"
+
+        total = sum(x["total"] for x in st.session_state.order)
+        text += f"\nסה\"כ: ₪ {total}"
+
+        st.download_button(
+            "📥 הורד קובץ",
+            text,
+            file_name="order.txt"
+        )
