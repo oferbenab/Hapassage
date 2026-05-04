@@ -2,45 +2,41 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 import datetime
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
 
 st.set_page_config(page_title="🍔 מערכת ניהול מסעדה", layout="wide")
 
 # ======================
-# DB
+# DB INIT
 # ======================
 conn = sqlite3.connect('hamburger.db', check_same_thread=False)
 c = conn.cursor()
 
-c.execute('''
-CREATE TABLE IF NOT EXISTS menu (
-    id INTEGER PRIMARY KEY,
+c.execute('''CREATE TABLE IF NOT EXISTS menu (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE,
     price REAL
-)
-''')
+)''')
 
-c.execute('''
-CREATE TABLE IF NOT EXISTS orders (
+c.execute('''CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     group_name TEXT,
     phone TEXT,
     email TEXT,
-    people INTEGER,
-    budget REAL,
     total REAL,
     created_at TEXT
-)
-''')
+)''')
 
-c.execute('''
-CREATE TABLE IF NOT EXISTS order_items (
+c.execute('''CREATE TABLE IF NOT EXISTS order_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     order_id INTEGER,
     product_name TEXT,
     quantity INTEGER,
-    price REAL
-)
-''')
+    total REAL
+)''')
 
 conn.commit()
 
@@ -50,179 +46,203 @@ conn.commit()
 if "order" not in st.session_state:
     st.session_state.order = []
 
+if "group" not in st.session_state:
+    st.session_state.group = ""
+    st.session_state.phone = ""
+    st.session_state.email = ""
+
 # ======================
 # SIDEBAR
 # ======================
-page = st.sidebar.radio("ניווט", [
-    "🆕 הזמנה חדשה",
-    "📋 תפריט",
-    "📊 היסטוריה",
-    "📄 PDF"
-])
+page = st.sidebar.radio("ניווט", ["🆕 הזמנה", "📋 תפריט", "📊 היסטוריה", "📄 PDF"])
+
+if st.sidebar.button("⬅ חזור להזמנה"):
+    page = "🆕 הזמנה"
 
 # ======================
-# 📋 MENU (טבלה מלאה)
+# 📋 MENU
 # ======================
 if page == "📋 תפריט":
 
     st.title("📋 ניהול תפריט")
 
-    df = pd.read_sql("SELECT id, name, price FROM menu", conn)
+    df = pd.read_sql("SELECT * FROM menu", conn)
 
     edited = st.data_editor(
         df,
         num_rows="dynamic",
-        use_container_width=True,
-        key="menu_editor"
+        use_container_width=True
     )
 
-    # שמירה
     if st.button("💾 שמור שינויים"):
-        c.execute("DELETE FROM menu")
         for _, row in edited.iterrows():
-            if pd.notna(row["name"]):
-                c.execute(
-                    "INSERT INTO menu (id, name, price) VALUES (?, ?, ?)",
-                    (row["id"], row["name"], row["price"])
-                )
+            if pd.isna(row["id"]):
+                c.execute("INSERT INTO menu (name, price) VALUES (?,?)",
+                          (row["name"], row["price"]))
+            else:
+                c.execute("UPDATE menu SET name=?, price=? WHERE id=?",
+                          (row["name"], row["price"], row["id"]))
         conn.commit()
-        st.success("נשמר!")
+        st.success("התפריט עודכן")
 
 # ======================
-# 🆕 NEW ORDER
+# 🆕 ORDER
 # ======================
-elif page == "🆕 הזמנה חדשה":
+elif page == "🆕 הזמנה":
 
-    st.title("🆕 הזמנה חדשה")
+    st.title("🧾 הזמנה")
 
-    group = st.text_input("שם קבוצה")
-    phone = st.text_input("טלפון")
-    email = st.text_input("מייל")
-    people = st.number_input("מספר סועדים", min_value=1)
-    budget = st.number_input("תקציב ₪", min_value=0)
-
-    st.divider()
+    st.session_state.group = st.text_input("שם קבוצה", st.session_state.group)
+    st.session_state.phone = st.text_input("טלפון", st.session_state.phone)
+    st.session_state.email = st.text_input("מייל", st.session_state.email)
 
     menu_df = pd.read_sql("SELECT name, price FROM menu", conn)
 
     if not menu_df.empty:
-        product = st.selectbox("בחר מוצר", menu_df["name"])
-        qty = st.number_input("כמות", min_value=1, value=1)
+        col1, col2, col3 = st.columns([4,1,1])
+        product = col1.selectbox("מוצר", menu_df["name"])
+        qty = col2.number_input("כמות", min_value=1, value=1)
 
-        if st.button("➕ הוסף"):
+        if col3.button("➕"):
             price = menu_df[menu_df["name"] == product]["price"].values[0]
-
             st.session_state.order.append({
                 "name": product,
                 "qty": qty,
                 "price": price,
                 "total": price * qty
             })
-            st.rerun()
 
-    # ===== ORDER TABLE
+    # ===== TABLE
     if st.session_state.order:
-
         df = pd.DataFrame(st.session_state.order)
 
-        df_display = df[["name", "qty", "total"]].rename(columns={
-            "name": "מוצר",
-            "qty": "כמות",
-            "total": "סכום"
-        })
-
-        edited_df = st.data_editor(
-            df_display,
-            use_container_width=True,
-            key="order_editor"
+        edited = st.data_editor(
+            df[["name", "qty", "total"]],
+            use_container_width=True
         )
 
-        # עדכון
         new_order = []
-        for i, row in edited_df.iterrows():
+        for i, row in edited.iterrows():
             price = df.iloc[i]["price"]
             new_order.append({
-                "name": row["מוצר"],
-                "qty": int(row["כמות"]),
+                "name": row["name"],
+                "qty": int(row["qty"]),
                 "price": price,
-                "total": int(row["כמות"]) * price
+                "total": int(row["qty"]) * price
             })
 
         st.session_state.order = new_order
 
-        total = sum(x["total"] for x in st.session_state.order)
+        total = sum(x["total"] for x in new_order)
         st.markdown(f"## 💰 סה\"כ: ₪ {total}")
 
-        if budget and total > budget:
-            st.error("⚠️ חרגת מהתקציב!")
-
         if st.button("💾 שמור הזמנה"):
-
-            c.execute("""
-            INSERT INTO orders (group_name, phone, email, people, budget, total, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                group, phone, email, people, budget, total,
+            c.execute("""INSERT INTO orders
+            (group_name, phone, email, total, created_at)
+            VALUES (?, ?, ?, ?, ?)""",
+            (
+                st.session_state.group,
+                st.session_state.phone,
+                st.session_state.email,
+                total,
                 datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
             ))
 
-            order_id = c.lastrowid
+            oid = c.lastrowid
 
-            for item in st.session_state.order:
-                c.execute("""
-                INSERT INTO order_items (order_id, product_name, quantity, price)
-                VALUES (?, ?, ?, ?)
-                """, (
-                    order_id,
-                    item["name"],
-                    item["qty"],
-                    item["total"]
-                ))
+            for item in new_order:
+                c.execute("""INSERT INTO order_items
+                (order_id, product_name, quantity, total)
+                VALUES (?, ?, ?, ?)""",
+                (oid, item["name"], item["qty"], item["total"]))
 
             conn.commit()
-            st.session_state.order = []
-            st.success("נשמר!")
+            st.success("ההזמנה נשמרה")
 
 # ======================
-# 📊 HISTORY (טבלאות מסודרות)
+# 📊 HISTORY
 # ======================
 elif page == "📊 היסטוריה":
 
     st.title("📊 היסטוריה")
 
     orders = pd.read_sql("SELECT * FROM orders ORDER BY id DESC", conn)
-
     st.dataframe(orders, use_container_width=True)
 
-    order_id = st.number_input("בחר ID להזמנה", min_value=1)
+    selected = st.selectbox("בחר הזמנה", orders["id"])
 
-    if st.button("הצג פרטים"):
-        items = pd.read_sql(f"""
-        SELECT product_name as מוצר,
-               quantity as כמות,
-               price as סכום
-        FROM order_items
-        WHERE order_id = {order_id}
-        """, conn)
+    if selected:
 
-        st.data_editor(items, use_container_width=True)
+        items = pd.read_sql(
+            "SELECT product_name, quantity, total FROM order_items WHERE order_id=?",
+            conn,
+            params=(selected,)
+        )
+
+        st.dataframe(items, use_container_width=True)
+
+        if st.button("🔄 טען להזמנה"):
+            st.session_state.order = [
+                {
+                    "name": r["product_name"],
+                    "qty": r["quantity"],
+                    "price": r["total"] / r["quantity"],
+                    "total": r["total"]
+                }
+                for _, r in items.iterrows()
+            ]
+
+            order_info = orders[orders["id"] == selected].iloc[0]
+            st.session_state.group = order_info["group_name"]
+            st.session_state.phone = order_info["phone"]
+            st.session_state.email = order_info["email"]
+
+            st.success("ההזמנה נטענה לעריכה")
 
 # ======================
 # 📄 PDF
 # ======================
 elif page == "📄 PDF":
 
-    st.title("📄 ייצוא")
+    st.title("📄 הפקת חשבונית")
 
     if not st.session_state.order:
         st.warning("אין הזמנה")
     else:
-        text = "הזמנה:\n\n"
+
+        file = "invoice.pdf"
+        doc = SimpleDocTemplate(file, pagesize=A4)
+        styles = getSampleStyleSheet()
+
+        elements = []
+
+        elements.append(Paragraph("Invoice", styles["Title"]))
+        elements.append(Spacer(1, 10))
+
+        elements.append(Paragraph(f"Customer: {st.session_state.group}", styles["Normal"]))
+        elements.append(Paragraph(f"Phone: {st.session_state.phone}", styles["Normal"]))
+        elements.append(Paragraph(f"Email: {st.session_state.email}", styles["Normal"]))
+        elements.append(Paragraph(f"Date: {datetime.datetime.now()}", styles["Normal"]))
+
+        elements.append(Spacer(1, 20))
+
+        data = [["Product", "Qty", "Total"]]
 
         for item in st.session_state.order:
-            text += f"{item['name']} | {item['qty']} | ₪ {item['total']}\n"
+            data.append([item["name"], item["qty"], item["total"]])
 
         total = sum(x["total"] for x in st.session_state.order)
-        text += f"\nסה\"כ: ₪ {total}"
+        data.append(["", "סה\"כ", total])
 
-        st.download_button("📥 הורד", text, file_name="order.txt")
+        table = Table(data)
+        table.setStyle(TableStyle([
+            ("GRID", (0,0), (-1,-1), 1, colors.black),
+            ("BACKGROUND", (0,0), (-1,0), colors.grey)
+        ]))
+
+        elements.append(table)
+
+        doc.build(elements)
+
+        with open(file, "rb") as f:
+            st.download_button("📥 הורד PDF", f, file_name="invoice.pdf")
