@@ -3,9 +3,9 @@ import sqlite3
 import pandas as pd
 import datetime
 
-st.set_page_config(page_title="🍔 המבורגר - ניהול הזמנות", layout="centered")
+st.set_page_config(page_title="🍔 מסעדת המבורגר", layout="centered")
 
-st.title("🍔 מסעדת המבורגר - מערכת ניהול הזמנות")
+st.title("🍔 ניהול קבוצות סועדים - מסעדת המבורגר")
 
 # ====================== DATABASE ======================
 conn = sqlite3.connect('hamburger.db', check_same_thread=False)
@@ -15,19 +15,20 @@ c.execute('''CREATE TABLE IF NOT EXISTS menu (id INTEGER PRIMARY KEY, name TEXT 
 c.execute('''CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY, group_name TEXT, phone TEXT, email TEXT, num_people INTEGER,
     budget REAL, order_date TEXT, order_time TEXT, total REAL, tip_percent INTEGER,
-    tip_amount REAL, final_total REAL, status TEXT, created_at TEXT)''')
+    tip_amount REAL, final_total REAL, created_at TEXT)''')
 c.execute('''CREATE TABLE IF NOT EXISTS order_items (
     id INTEGER PRIMARY KEY, order_id INTEGER, product_name TEXT, quantity INTEGER, line_total REAL)''')
 conn.commit()
 
-# ====================== SESSION ======================
+# ====================== SESSION STATE ======================
 if 'current_order' not in st.session_state:
     st.session_state.current_order = []
 
 def reset_order():
     st.session_state.current_order = []
-    for key in ['group','phone','email','people','budget']:
-        if key in st.session_state: del st.session_state[key]
+    for key in ['group', 'phone', 'email', 'people', 'budget']:
+        if key in st.session_state:
+            del st.session_state[key]
 
 # ====================== SIDEBAR ======================
 page = st.sidebar.selectbox("בחר עמוד", 
@@ -35,11 +36,11 @@ page = st.sidebar.selectbox("בחר עמוד",
 
 # ====================== MENU ======================
 if page == "ניהול תפריט":
-    st.subheader("ניהול תפריט")
+    st.subheader("ניהול התפריט")
     col1, col2 = st.columns([3,1])
     with col1:
-        st.markdown("**שם המוצר**")
-        name = st.text_input("", placeholder="המבורגר קלאסי", label_visibility="collapsed")
+        st.markdown("**שם המוצר**", unsafe_allow_html=True)
+        name = st.text_input("", placeholder="שם המוצר", label_visibility="collapsed")
     with col2:
         st.markdown("**מחיר ₪**")
         price = st.number_input("", min_value=0, value=0, step=1, label_visibility="collapsed")
@@ -66,7 +67,7 @@ elif page == "הזמנה חדשה":
         st.markdown("**שם הקבוצה**")
         st.text_input("", key="group", placeholder="שם הקבוצה", label_visibility="collapsed")
         st.markdown("**טלפון**")
-        st.text_input("", key="phone", placeholder="050-1234567", label_visibility="collapsed")
+        st.text_input("", key="phone", placeholder="050-0000000", label_visibility="collapsed")
         st.markdown("**מייל**")
         st.text_input("", key="email", placeholder="example@email.com", label_visibility="collapsed")
     with col2:
@@ -77,53 +78,23 @@ elif page == "הזמנה חדשה":
 
     st.subheader("תאריך ושעה")
     col3, col4 = st.columns(2)
-    with col3: st.date_input("תאריך", datetime.date.today(), key="date")
-    with col4: st.time_input("שעה", datetime.datetime.now().time(), key="time")
+    with col3:
+        st.date_input("תאריך", datetime.date.today(), key="date")
+    with col4:
+        st.time_input("שעה", datetime.datetime.now().time(), key="time")
 
     st.subheader("הוסף מוצרים")
     menu_df = pd.read_sql("SELECT name, price FROM menu", conn)
     if not menu_df.empty:
-        product = st.selectbox("בחר מוצר", menu_df['name'], key="product")
-        qty = st.number_input("כמות", min_value=1, value=1, step=1, key="qty")
+        st.markdown("**בחר מוצר**")
+        product = st.selectbox("", menu_df['name'], key="product")
+        st.markdown("**כמות**")
+        qty = st.number_input("", min_value=1, value=None, step=1, key="qty", label_visibility="collapsed")
         
         if st.button("➕ הוסף להזמנה"):
-            price = menu_df[menu_df['name'] == product]['price'].values[0]
-            st.session_state.current_order.append({
-                "מוצר": product, "כמות": qty, "סכום": price * qty
-            })
-            st.success(f"נוסף: {qty} × {product}")
-            st.rerun()
-
-    if st.session_state.current_order:
-        st.subheader("ההזמנה הנוכחית")
-        df_order = pd.DataFrame(st.session_state.current_order)
-        st.dataframe(df_order, use_container_width=True, hide_index=True)
-        
-        total = df_order["סכום"].sum()
-        tip_percent = st.radio("טיפ (%)", [10, 15, 20], horizontal=True)
-        tip_amount = total * tip_percent / 100
-        final = total - tip_amount
-        
-        st.success(f"**סכום כולל: {total:.0f} ₪**")
-        st.info(f"**טיפ: {tip_amount:.0f} ₪** | **סופי: {final:.0f} ₪**")
-
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("💾 שמור הזמנה", type="primary"):
-                st.success("✅ ההזמנה נשמרה בהצלחה!")
-        with col2:
-            if st.button("🆕 הזמנה חדשה"):
-                reset_order()
-                st.rerun()
-
-elif page == "ייצוא PDF":
-    st.subheader("ייצוא PDF")
-    st.info("פיצ'ר ייצוא PDF (מנהל / מטבח / לקוח) יורחב בהמשך")
-
-else:
-    st.subheader("היסטוריה")
-    df = pd.read_sql("SELECT id as 'מספר', group_name as 'קבוצה', order_date as 'תאריך', final_total as 'סכום סופי' FROM orders ORDER BY created_at DESC", conn)
-    st.dataframe(df, use_container_width=True, hide_index=True)
-
-st.divider()
-st.caption("מערכת ניהול הזמנות - מסעדת המבורגר")
+            if qty is not None:
+                price = menu_df[menu_df['name'] == product]['price'].values[0]
+                st.session_state.current_order.append({
+                    "מוצר": product,
+                    "כמות": qty,
+                    "סכום
