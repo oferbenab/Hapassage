@@ -3,7 +3,7 @@ import sqlite3
 import pandas as pd
 import datetime
 
-st.set_page_config(page_title="מסעדת המבורגר", layout="centered")
+st.set_page_config(page_title="🍔 מסעדת המבורגר", layout="centered")
 
 st.title("🍔 ניהול קבוצות סועדים")
 
@@ -13,8 +13,7 @@ c = conn.cursor()
 c.execute('''CREATE TABLE IF NOT EXISTS menu (id INTEGER PRIMARY KEY, name TEXT UNIQUE, price REAL)''')
 conn.commit()
 
-page = st.sidebar.selectbox("בחר עמוד", 
-    ["הזמנה חדשה", "ניהול תפריט", "היסטוריה"])
+page = st.sidebar.selectbox("בחר עמוד", ["הזמנה חדשה", "ניהול תפריט", "היסטוריה"])
 
 if page == "ניהול תפריט":
     st.subheader("ניהול תפריט")
@@ -26,15 +25,15 @@ if page == "ניהול תפריט":
         st.write("**מחיר ₪**")
         price = st.number_input(" ", min_value=0, value=0, step=1, label_visibility="collapsed")
     
-    if st.button("הוסף מוצר"):
+    if st.button("➕ הוסף מוצר"):
         if name:
             c.execute("INSERT OR IGNORE INTO menu (name, price) VALUES (?, ?)", (name, price))
             conn.commit()
-            st.success("נוסף בהצלחה!")
+            st.success("✅ נוסף!")
             st.rerun()
 
-    st.subheader("תפריט")
-    df = pd.read_sql("SELECT name as 'מוצר', price as 'מחיר' FROM menu", conn)
+    st.subheader("תפריט נוכחי")
+    df = pd.read_sql("SELECT name as 'מוצר', price as 'מחיר ₪' FROM menu", conn)
     st.dataframe(df, use_container_width=True)
 
 elif page == "הזמנה חדשה":
@@ -44,11 +43,31 @@ elif page == "הזמנה חדשה":
         st.write("**שם הקבוצה**")
         st.text_input(" ", key="group", placeholder="שם הקבוצה", label_visibility="collapsed")
         st.write("**טלפון**")
-        st.text_input(" ", key="phone", placeholder="050-1234567", label_visibility="collapsed")
+        st.text_input(" ", key="phone", placeholder="טלפון", label_visibility="collapsed")
         st.write("**מייל**")
-        st.text_input(" ", key="email", placeholder="example@email.com", label_visibility="collapsed")
+        st.text_input(" ", key="email", placeholder="מייל", label_visibility="collapsed")
     with col2:
         st.write("**מספר סועדים**")
         st.number_input(" ", min_value=1, value=None, step=1, key="people", label_visibility="collapsed")
-        st.write("**תקציב**")
-        st.number
+        st.write("**תקציב (₪)**")
+        st.number_input(" ", min_value=0, value=None, step=1, key="budget", label_visibility="collapsed")
+
+    st.subheader("הוסף מוצרים")
+    menu_df = pd.read_sql("SELECT name FROM menu", conn)
+    if not menu_df.empty:
+        st.write("**בחר מוצר**")
+        product = st.selectbox(" ", menu_df['name'], key="product")
+        st.write("**כמות**")
+        qty = st.number_input(" ", min_value=1, value=None, step=1, key="qty", label_visibility="collapsed")
+        
+        if st.button("➕ הוסף להזמנה"):
+            st.success("נוסף להזמנה")
+
+    if st.button("שמור הזמנה"):
+        st.success("הזמנה נשמרה!")
+
+else:
+    st.subheader("היסטוריה")
+    st.info("היסטוריה תופיע כאן")
+
+st.caption("🍔 מסעדת המבורגר")
